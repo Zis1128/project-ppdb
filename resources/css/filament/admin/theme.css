@@ -1,0 +1,26 @@
+@import '/vendor/filament/filament/resources/css/theme.css';
+
+@config 'tailwind.config.js';
+
+/* Custom styles */
+.fi-sidebar {
+    background: linear-gradient(180deg, #1e40af 0%, #1e3a8a 100%);
+}
+
+.fi-sidebar-item-button:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+.fi-main-header {
+    border-bottom: 2px solid #e5e7eb;
+}
+
+/* Custom card shadow */
+.fi-section {
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+}
+
+/* Badge custom */
+.fi-badge {
+    font-weight: 600;
+}
