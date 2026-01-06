@@ -15,6 +15,7 @@ class Pembayaran extends Model
         'pendaftaran_id',
         'jumlah',
         'metode_pembayaran',
+        'payment_type',              // ✅ TAMBAH INI
         'bank_tujuan',
         'no_rekening',
         'atas_nama',
@@ -24,6 +25,11 @@ class Pembayaran extends Model
         'verified_at',
         'catatan',
         'tanggal_bayar',
+        'midtrans_order_id',         // ✅ TAMBAH INI
+        'midtrans_transaction_id',   // ✅ TAMBAH INI
+        'midtrans_transaction_status', // ✅ TAMBAH INI
+        'midtrans_response',         // ✅ TAMBAH INI
+        'paid_at',  
     ];
 
     protected $casts = [

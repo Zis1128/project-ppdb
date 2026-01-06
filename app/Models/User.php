@@ -12,7 +12,7 @@ use Spatie\Permission\Traits\HasRoles;
 
 class User extends Authenticatable implements FilamentUser
 {
-    use HasFactory, Notifiable, HasRoles, SoftDeletes;
+    use HasFactory, Notifiable, HasRoles;
 
     protected $fillable = [
         'name',
@@ -49,6 +49,9 @@ class User extends Authenticatable implements FilamentUser
     if ($panel->getId() === 'panitia') {
         return $this->hasAnyRole(['admin', 'panitia']) && $this->is_active;
     }
+    if ($panel->getId() === 'user') {
+            return $this->hasRole('user') && $this->is_active;
+        }
     
     return false;
 }

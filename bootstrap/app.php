@@ -11,10 +11,14 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware) {
-        //
-        $middleware->alias([
-        'panitia' => \App\Http\Middleware\PanitiaMiddleware::class,
-    ]);
+        // HAPUS SEMUA BARIS INI jika ada:
+        // $middleware->alias([
+        //     'role' => \Spatie\Permission\Middlewares\RoleMiddleware::class,
+        //     'permission' => \Spatie\Permission\Middlewares\PermissionMiddleware::class,
+        //     'role_or_permission' => \Spatie\Permission\Middlewares\RoleOrPermissionMiddleware::class,
+        // ]);
+        
+        // Biarkan kosong atau hanya ini:
     })
     ->withExceptions(function (Exceptions $exceptions) {
         //

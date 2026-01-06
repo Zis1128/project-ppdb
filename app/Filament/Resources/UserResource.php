@@ -10,18 +10,15 @@ use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Storage;
 use Spatie\Permission\Models\Role;
 
 class UserResource extends Resource
 {
     protected static ?string $model = User::class;
-
     protected static ?string $navigationIcon = 'heroicon-o-users';
-
     protected static ?string $navigationGroup = 'Pengaturan';
-
     protected static ?int $navigationSort = 1;
-
     protected static ?string $navigationLabel = 'Manajemen User';
 
     public static function form(Form $form): Form
@@ -42,7 +39,8 @@ class UserResource extends Resource
                                     ->required()
                                     ->maxLength(255)
                                     ->unique(ignoreRecord: true)
-                                    ->alphaDash(),
+                                    ->alphaDash()
+                                    ->helperText('Hanya huruf, angka, dash, dan underscore'),
 
                                 Forms\Components\TextInput::make('email')
                                     ->label('Email')
@@ -57,11 +55,12 @@ class UserResource extends Resource
                                 Forms\Components\TextInput::make('password')
                                     ->label('Password')
                                     ->password()
-                                    ->dehydrateStateUsing(fn ($state) => Hash::make($state))
+                                    ->dehydrateStateUsing(fn ($state) => !empty($state) ? Hash::make($state) : null)
                                     ->dehydrated(fn ($state) => filled($state))
                                     ->required(fn (string $context): bool => $context === 'create')
                                     ->minLength(8)
-                                    ->revealable(),
+                                    ->revealable()
+                                    ->helperText('Minimal 8 karakter. Kosongkan jika tidak ingin mengubah password'),
 
                                 Forms\Components\TextInput::make('no_hp')
                                     ->label('No. HP')
@@ -72,6 +71,7 @@ class UserResource extends Resource
                         Forms\Components\FileUpload::make('foto')
                             ->label('Foto Profil')
                             ->image()
+                            ->disk('public')
                             ->directory('user-photos')
                             ->maxSize(1024)
                             ->imageEditor()
@@ -80,13 +80,14 @@ class UserResource extends Resource
 
                         Forms\Components\Select::make('roles')
                             ->label('Role')
+                            ->multiple()
                             ->relationship('roles', 'name')
-                            ->options(Role::pluck('name', 'name'))
-                            ->required()
                             ->searchable()
                             ->preload()
                             ->native(false)
-                            ->columnSpanFull(),
+                            ->required()
+                            ->columnSpanFull()
+                            ->helperText('Pilih role untuk user ini'),
 
                         Forms\Components\Toggle::make('is_active')
                             ->label('Status Aktif')
@@ -103,6 +104,7 @@ class UserResource extends Resource
                 Tables\Columns\ImageColumn::make('foto')
                     ->label('Foto')
                     ->circular()
+                    ->disk('public')
                     ->defaultImageUrl(url('/images/default-avatar.png')),
 
                 Tables\Columns\TextColumn::make('name')
@@ -173,7 +175,6 @@ class UserResource extends Resource
                     ->falseLabel('Tidak Aktif'),
             ])
             ->actions([
-                Tables\Actions\ViewAction::make(),
                 Tables\Actions\EditAction::make(),
                 
                 Tables\Actions\Action::make('activate')
@@ -228,7 +229,6 @@ class UserResource extends Resource
         return [
             'index' => Pages\ListUsers::route('/'),
             'create' => Pages\CreateUser::route('/create'),
-            //'view' => Pages\ViewUser::route('/{record}'),
             'edit' => Pages\EditUser::route('/{record}/edit'),
         ];
     }

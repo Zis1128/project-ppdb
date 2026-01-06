@@ -121,7 +121,30 @@ class PengaturanSeeder extends Seeder
                 'description' => 'Tipe file yang boleh diupload',
                 'group' => 'system',
             ],
+
+            // Bank Settings - TAMBAHKAN INI
+            [
+                'key' => 'bank_name',
+                'value' => 'Bank BRI',
+                'type' => 'text',
+                'group' => 'payment',
+            ],
+            [
+                'key' => 'bank_account_number',
+                'value' => '0123456789012345',
+                'type' => 'text',
+                'group' => 'payment',
+            ],
+            [
+                'key' => 'bank_account_name',
+                'value' => 'SMK NUSANTARA',
+                'type' => 'text',
+                'group' => 'payment',
+            ],
+        
         ];
+
+        
 
         foreach ($settings as $setting) {
             Pengaturan::create($setting);

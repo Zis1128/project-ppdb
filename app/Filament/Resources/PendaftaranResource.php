@@ -880,7 +880,7 @@ public static function getPages(): array
     return [
         'index' => Pages\ListPendaftarans::route('/'),
         'create' => Pages\CreatePendaftaran::route('/create'),
-        //'view' => Pages\ViewPendaftaran::route('/{record}'),
+        'view' => Pages\ViewPendaftaran::route('/{record}'),
         'edit' => Pages\EditPendaftaran::route('/{record}/edit'),
     ];
 }

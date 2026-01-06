@@ -9,6 +9,7 @@ use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Illuminate\Support\Facades\Storage;  // ← FIX INI
 
 class JurusanResource extends Resource
 {
@@ -51,13 +52,36 @@ class JurusanResource extends Resource
                             ->columnSpanFull()
                             ->helperText('Penjelasan singkat tentang jurusan'),
 
-                        Forms\Components\FileUpload::make('icon')
+                        Forms\Components\FileUpload::make('logo')
                             ->label('Icon/Logo Jurusan')
                             ->image()
-                            ->directory('jurusan-icons')
-                            ->maxSize(1024)
-                            ->imageEditor()
+                            ->disk('public')
+                            ->directory('images')
+                            ->visibility('public')
+                            ->preserveFilenames(false)
+                            ->maxSize(2048)
+                            ->acceptedFileTypes(['image/png', 'image/jpeg', 'image/jpg', 'image/svg+xml'])
+                            ->imagePreviewHeight('250')
+                            ->helperText('Upload icon/logo jurusan. Format: PNG, JPG, SVG. Maksimal 2MB.')
+                            ->columnSpanFull()
+                            // TAMBAHKAN INI untuk delete old file
+                            ->deleteUploadedFileUsing(function ($file) {
+                                if ($file && Storage::disk('public')->exists($file)) {
+                                    Storage::disk('public')->delete($file);
+                                }
+                            }),
+
+                        Forms\Components\Textarea::make('kompetensi')
+                            ->label('Kompetensi Keahlian')
+                            ->placeholder('Pisahkan dengan koma. Contoh: Pemrograman Web, Database, Networking')
+                            ->rows(3)
                             ->columnSpanFull(),
+
+                        Forms\Components\Textarea::make('prospek_kerja')
+                            ->label('Prospek Kerja')
+                            ->placeholder('Contoh: Web Developer, System Analyst, IT Support, dll')
+                            ->rows(3)
+                            ->columnSpanFull(),    
 
                         Forms\Components\Grid::make(3)
                             ->schema([
@@ -68,6 +92,20 @@ class JurusanResource extends Resource
                                     ->minValue(0)
                                     ->default(0)
                                     ->suffix('siswa'),
+
+                                Forms\Components\TextInput::make('kuota_terpakai')
+                                    ->label('Kuota Terpakai')
+                                    ->numeric()
+                                    ->default(0)
+                                    ->disabled()
+                                    ->dehydrated(false)
+                                    ->helperText('Jumlah siswa yang sudah diterima')
+                                    ->visible(fn (string $context) => $context === 'edit'),
+
+                                Forms\Components\Placeholder::make('kuota_tersisa')
+                                    ->label('Sisa Kuota')
+                                    ->content(fn ($record) => $record ? max(0, $record->kuota - $record->kuota_terpakai) : '-')
+                                    ->visible(fn (string $context) => $context === 'edit'),
 
                                 Forms\Components\TextInput::make('passing_grade')
                                     ->label('Passing Grade')
@@ -106,10 +144,19 @@ class JurusanResource extends Resource
                     ->badge()
                     ->color('primary'),
 
-                Tables\Columns\ImageColumn::make('icon')
+                // ← FIX INI: Ganti 'icon' jadi 'logo'
+                Tables\Columns\ImageColumn::make('logo')  // ✅ BENAR
                     ->label('Icon')
+                    ->disk('public')
+                    ->height(50)
+                    ->width(50)
                     ->circular()
-                    ->defaultImageUrl(url('/images/default-jurusan.png')),
+                    ->defaultImageUrl(function ($record) {
+                        // Fallback ke UI Avatars jika logo kosong
+                        $initial = strtoupper(substr($record->kode, 0, 2));
+                        return "https://ui-avatars.com/api/?name={$initial}&background=3b82f6&color=fff&size=100&font-size=0.4&bold=true";
+                    })
+                    ->extraImgAttributes(['loading' => 'lazy']),
 
                 Tables\Columns\TextColumn::make('nama')
                     ->label('Nama Jurusan')
@@ -124,23 +171,45 @@ class JurusanResource extends Resource
                     ->sortable()
                     ->suffix(' siswa'),
 
+                Tables\Columns\TextColumn::make('kuota_terpakai')
+                    ->label('Terpakai')
+                    ->sortable()
+                    ->alignCenter()
+                    ->badge()
+                    ->color(fn (Jurusan $record): string => 
+                        $record->kuota_terpakai >= $record->kuota ? 'danger' : 
+                        ($record->kuota_terpakai >= ($record->kuota * 0.8) ? 'warning' : 'success')
+                    ),
+
+                Tables\Columns\TextColumn::make('kuota_tersisa')
+                    ->label('Sisa Kuota')
+                    ->getStateUsing(fn (Jurusan $record): int => max(0, $record->kuota - $record->kuota_terpakai))
+                    ->alignCenter()
+                    ->badge()
+                    ->color(fn ($state): string => 
+                        $state === 0 ? 'danger' : 
+                        ($state <= 5 ? 'warning' : 'success')
+                    ),
+
                 Tables\Columns\TextColumn::make('passing_grade')
                     ->label('Passing Grade')
                     ->numeric()
                     ->sortable()
                     ->suffix(' poin'),
 
-                Tables\Columns\TextColumn::make('pendaftaransPilihan1_count')
+                Tables\Columns\TextColumn::make('pendaftaranPilihan1_count')
                     ->label('Peminat P1')
-                    ->counts('pendaftaransPilihan1')
+                    ->counts('pendaftaranPilihan1')
                     ->badge()
-                    ->color('success'),
+                    ->color('success')
+                    ->toggleable(isToggledHiddenByDefault: true),
 
-                Tables\Columns\TextColumn::make('pendaftaransPilihan2_count')
+                Tables\Columns\TextColumn::make('pendaftaranPilihan2_count')
                     ->label('Peminat P2')
-                    ->counts('pendaftaransPilihan2')
+                    ->counts('pendaftaranPilihan2')
                     ->badge()
-                    ->color('info'),
+                    ->color('info')
+                    ->toggleable(isToggledHiddenByDefault: true),
 
                 Tables\Columns\TextColumn::make('urutan')
                     ->label('Urutan')
@@ -165,7 +234,13 @@ class JurusanResource extends Resource
             ->actions([
                 Tables\Actions\ViewAction::make(),
                 Tables\Actions\EditAction::make(),
-                Tables\Actions\DeleteAction::make(),
+                Tables\Actions\DeleteAction::make()
+                    ->before(function (Jurusan $record) {
+                        // Delete logo when deleting jurusan
+                        if ($record->logo && Storage::disk('public')->exists($record->logo)) {
+                            Storage::disk('public')->delete($record->logo);
+                        }
+                    }),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([

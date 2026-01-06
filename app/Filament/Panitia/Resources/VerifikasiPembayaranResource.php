@@ -9,36 +9,17 @@ use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
-use Filament\Infolists;
 use Filament\Infolists\Infolist;
-use Illuminate\Database\Eloquent\Builder;
+use Filament\Infolists\Components;
 use Filament\Notifications\Notification;
 
 class VerifikasiPembayaranResource extends Resource
 {
     protected static ?string $model = Pembayaran::class;
-
-    protected static ?string $navigationIcon = 'heroicon-o-credit-card';
-
-    protected static ?string $navigationGroup = 'Verifikasi';
-
-    protected static ?int $navigationSort = 2;
-
+    protected static ?string $navigationIcon = 'heroicon-o-banknotes';
     protected static ?string $navigationLabel = 'Verifikasi Pembayaran';
-
-    protected static ?string $modelLabel = 'Verifikasi Pembayaran';
-
-    protected static ?string $pluralModelLabel = 'Verifikasi Pembayaran';
-
-    public static function getNavigationBadge(): ?string
-    {
-        return static::getModel()::where('status', 'pending')->count();
-    }
-
-    public static function getNavigationBadgeColor(): ?string
-    {
-        return 'danger';
-    }
+    protected static ?string $navigationGroup = 'Verifikasi';
+    protected static ?int $navigationSort = 2;
 
     public static function table(Table $table): Table
     {
@@ -48,398 +29,252 @@ class VerifikasiPembayaranResource extends Resource
                     ->label('No. Invoice')
                     ->searchable()
                     ->sortable()
-                    ->weight('bold')
-                    ->copyable(),
+                    ->copyable()
+                    ->weight('bold'),
 
                 Tables\Columns\TextColumn::make('pendaftaran.no_pendaftaran')
                     ->label('No. Pendaftaran')
                     ->searchable()
-                    ->sortable()
                     ->copyable(),
 
                 Tables\Columns\TextColumn::make('pendaftaran.nama_lengkap')
-                    ->label('Nama')
+                    ->label('Nama Lengkap')
                     ->searchable()
-                    ->sortable()
-                    ->limit(30)
-                    ->wrap(),
+                    ->sortable(),
 
                 Tables\Columns\TextColumn::make('jumlah')
                     ->label('Jumlah')
                     ->money('IDR')
                     ->sortable(),
 
+                Tables\Columns\TextColumn::make('tanggal_bayar')
+                    ->label('Tanggal Transfer')
+                    ->date('d M Y')
+                    ->sortable(),
+
                 Tables\Columns\TextColumn::make('metode_pembayaran')
                     ->label('Metode')
                     ->badge()
-                    ->color('info')
-                    ->formatStateUsing(fn (string $state): string => 
-                        str($state)->replace('_', ' ')->title()
-                    ),
+                    ->color('info'),
 
                 Tables\Columns\ImageColumn::make('bukti_pembayaran')
                     ->label('Bukti')
-                    ->size(60)
+                    ->disk('public')
+                    ->height(50)
                     ->defaultImageUrl(url('/images/no-image.png')),
 
-                Tables\Columns\TextColumn::make('tanggal_bayar')
-                    ->label('Tanggal Bayar')
-                    ->dateTime('d M Y H:i')
-                    ->sortable()
-                    ->toggleable(),
-
-                Tables\Columns\TextColumn::make('status')
+                Tables\Columns\BadgeColumn::make('status')
                     ->label('Status')
-                    ->badge()
-                    ->color(fn (string $state): string => match ($state) {
-                        'pending' => 'warning',
-                        'verified' => 'success',
-                        'rejected' => 'danger',
-                        default => 'gray',
-                    })
-                    ->formatStateUsing(fn (string $state): string => match ($state) {
-                        'pending' => 'Pending',
-                        'verified' => 'Lunas',
-                        'rejected' => 'Ditolak',
-                        default => $state,
-                    })
-                    ->sortable(),
-
-                Tables\Columns\TextColumn::make('verifiedBy.name')
-                    ->label('Diverifikasi Oleh')
-                    ->toggleable(isToggledHiddenByDefault: true),
+                    ->colors([
+                        'warning' => 'pending',
+                        'success' => 'verified',
+                        'danger' => 'rejected',
+                    ])
+                    ->icons([
+                        'heroicon-o-clock' => 'pending',
+                        'heroicon-o-check-circle' => 'verified',
+                        'heroicon-o-x-circle' => 'rejected',
+                    ]),
 
                 Tables\Columns\TextColumn::make('verified_at')
-                    ->label('Tanggal Verifikasi')
+                    ->label('Diverifikasi')
                     ->dateTime('d M Y H:i')
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
-
-                Tables\Columns\TextColumn::make('created_at')
-                    ->label('Dibuat')
-                    ->dateTime('d M Y H:i')
-                    ->sortable()
                     ->toggleable(),
             ])
-            ->defaultSort('created_at', 'desc')
             ->filters([
                 Tables\Filters\SelectFilter::make('status')
-                    ->label('Status')
                     ->options([
                         'pending' => 'Pending',
-                        'verified' => 'Lunas',
-                        'rejected' => 'Ditolak',
-                    ])
-                    ->default('pending'),
-
-                Tables\Filters\SelectFilter::make('metode_pembayaran')
-                    ->label('Metode')
-                    ->options([
-                        'transfer_bank' => 'Transfer Bank',
-                        'virtual_account' => 'Virtual Account',
-                        'ewallet' => 'E-Wallet',
-                        'cash' => 'Cash',
+                        'verified' => 'Verified',
+                        'rejected' => 'Rejected',
                     ]),
 
                 Tables\Filters\Filter::make('tanggal_bayar')
                     ->form([
-                        Forms\Components\DatePicker::make('tanggal_from')
-                            ->label('Dari Tanggal')
-                            ->native(false),
-                        Forms\Components\DatePicker::make('tanggal_until')
-                            ->label('Sampai Tanggal')
-                            ->native(false),
+                        Forms\Components\DatePicker::make('dari_tanggal')
+                            ->label('Dari Tanggal'),
+                        Forms\Components\DatePicker::make('sampai_tanggal')
+                            ->label('Sampai Tanggal'),
                     ])
-                    ->query(function (Builder $query, array $data): Builder {
+                    ->query(function ($query, array $data) {
                         return $query
-                            ->when(
-                                $data['tanggal_from'],
-                                fn (Builder $query, $date): Builder => $query->whereDate('tanggal_bayar', '>=', $date),
-                            )
-                            ->when(
-                                $data['tanggal_until'],
-                                fn (Builder $query, $date): Builder => $query->whereDate('tanggal_bayar', '<=', $date),
-                            );
+                            ->when($data['dari_tanggal'], fn ($q) => $q->whereDate('tanggal_bayar', '>=', $data['dari_tanggal']))
+                            ->when($data['sampai_tanggal'], fn ($q) => $q->whereDate('tanggal_bayar', '<=', $data['sampai_tanggal']));
                     }),
             ])
             ->actions([
                 Tables\Actions\ViewAction::make()
                     ->label('Detail'),
 
-                Tables\Actions\Action::make('preview')
-                    ->label('Lihat Bukti')
-                    ->icon('heroicon-o-photo')
-                    ->color('info')
-                    ->modalContent(fn ($record) => view('filament.panitia.modals.bukti-preview', [
-                        'record' => $record
-                    ]))
-                    ->modalWidth('3xl')
-                    ->slideOver()
-                    ->visible(fn ($record) => $record->bukti_pembayaran),
-
+                // ACTION: VERIFIKASI PEMBAYARAN
                 Tables\Actions\Action::make('verify')
                     ->label('Verifikasi')
                     ->icon('heroicon-o-check-circle')
                     ->color('success')
-                    ->form([
-                        Forms\Components\Select::make('status')
-                            ->label('Status')
-                            ->options([
-                                'verified' => 'Disetujui - Lunas',
-                                'rejected' => 'Ditolak',
-                            ])
-                            ->required()
-                            ->native(false)
-                            ->live(),
-
-                        Forms\Components\Textarea::make('catatan')
-                            ->label('Catatan')
-                            ->rows(4)
-                            ->required(fn (Forms\Get $get) => $get('status') === 'rejected')
-                            ->placeholder('Berikan catatan verifikasi...'),
-                    ])
-                    ->action(function (Pembayaran $record, array $data): void {
+                    ->requiresConfirmation()
+                    ->modalHeading('Verifikasi Pembayaran')
+                    ->modalDescription('Apakah bukti pembayaran valid dan sesuai?')
+                    ->modalSubmitActionLabel('Ya, Verifikasi')
+                    ->visible(fn (Pembayaran $record) => $record->status === 'pending')
+                    ->action(function (Pembayaran $record) {
                         $record->update([
-                            'status' => $data['status'],
-                            'catatan' => $data['catatan'] ?? null,
-                            'verified_by' => auth()->id(),
-                            'verified_at' => now(),
-                        ]);
-
-                        // Update status pendaftaran jika pembayaran diverifikasi
-                        if ($data['status'] === 'verified') {
-                            $record->pendaftaran->update([
-                                'status_pendaftaran' => 'verified',
-                            ]);
-                        }
-
-                        Notification::make()
-                            ->title('Verifikasi Pembayaran Berhasil')
-                            ->body("Pembayaran {$record->no_invoice} telah diverifikasi")
-                            ->success()
-                            ->send();
-                    })
-                    ->visible(fn (Pembayaran $record): bool => $record->status === 'pending'),
-
-                Tables\Actions\Action::make('edit_verification')
-                    ->label('Edit Verifikasi')
-                    ->icon('heroicon-o-pencil')
-                    ->color('warning')
-                    ->fillForm(fn ($record): array => [
-                        'status' => $record->status,
-                        'catatan' => $record->catatan,
-                    ])
-                    ->form([
-                        Forms\Components\Select::make('status')
-                            ->label('Status')
-                            ->options([
-                                'verified' => 'Disetujui - Lunas',
-                                'rejected' => 'Ditolak',
-                            ])
-                            ->required()
-                            ->native(false),
-
-                        Forms\Components\Textarea::make('catatan')
-                            ->label('Catatan')
-                            ->rows(4),
-                    ])
-                    ->action(function (Pembayaran $record, array $data): void {
-                        $record->update([
-                            'status' => $data['status'],
-                            'catatan' => $data['catatan'] ?? null,
+                            'status' => 'verified',
                             'verified_by' => auth()->id(),
                             'verified_at' => now(),
                         ]);
 
                         Notification::make()
-                            ->title('Update Verifikasi Berhasil')
+                            ->title('Pembayaran Diverifikasi')
                             ->success()
+                            ->body("Pembayaran dari {$record->pendaftaran->nama_lengkap} telah diverifikasi.")
                             ->send();
-                    })
-                    ->visible(fn (Pembayaran $record): bool => $record->status !== 'pending'),
+                    }),
+
+                // ACTION: TOLAK PEMBAYARAN
+                Tables\Actions\Action::make('reject')
+                    ->label('Tolak')
+                    ->icon('heroicon-o-x-circle')
+                    ->color('danger')
+                    ->requiresConfirmation()
+                    ->modalHeading('Tolak Pembayaran')
+                    ->modalDescription('Berikan alasan penolakan')
+                    ->form([
+                        Forms\Components\Textarea::make('catatan')
+                            ->label('Alasan Penolakan')
+                            ->required()
+                            ->rows(3)
+                            ->placeholder('Contoh: Bukti pembayaran tidak jelas, nominal tidak sesuai, dll'),
+                    ])
+                    ->visible(fn (Pembayaran $record) => $record->status === 'pending')
+                    ->action(function (Pembayaran $record, array $data) {
+                        $record->update([
+                            'status' => 'rejected',
+                            'catatan' => $data['catatan'],
+                            'verified_by' => auth()->id(),
+                            'verified_at' => now(),
+                        ]);
+
+                        Notification::make()
+                            ->title('Pembayaran Ditolak')
+                            ->danger()
+                            ->body("Pembayaran dari {$record->pendaftaran->nama_lengkap} telah ditolak.")
+                            ->send();
+                    }),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
-                    Tables\Actions\BulkAction::make('verify_bulk')
+                    Tables\Actions\BulkAction::make('verifyMultiple')
                         ->label('Verifikasi Terpilih')
                         ->icon('heroicon-o-check-circle')
                         ->color('success')
                         ->requiresConfirmation()
-                        ->form([
-                            Forms\Components\Textarea::make('catatan')
-                                ->label('Catatan (Opsional)')
-                                ->rows(3),
-                        ])
-                        ->action(function ($records, array $data): void {
+                        ->action(function ($records) {
+                            $count = 0;
                             foreach ($records as $record) {
-                                $record->update([
-                                    'status' => 'verified',
-                                    'catatan' => $data['catatan'] ?? null,
-                                    'verified_by' => auth()->id(),
-                                    'verified_at' => now(),
-                                ]);
-
-                                $record->pendaftaran->update([
-                                    'status_pendaftaran' => 'verified',
-                                ]);
+                                if ($record->status === 'pending') {
+                                    $record->update([
+                                        'status' => 'verified',
+                                        'verified_by' => auth()->id(),
+                                        'verified_at' => now(),
+                                    ]);
+                                    $count++;
+                                }
                             }
 
                             Notification::make()
-                                ->title('Verifikasi Massal Berhasil')
-                                ->body(count($records) . ' pembayaran telah diverifikasi')
+                                ->title("Berhasil Verifikasi {$count} Pembayaran")
                                 ->success()
                                 ->send();
                         }),
-
-                    Tables\Actions\BulkAction::make('export')
-                        ->label('Export Excel')
-                        ->icon('heroicon-o-arrow-down-tray')
-                        ->color('info')
-                        ->action(function () {
-                            Notification::make()
-                                ->title('Export dalam proses...')
-                                ->info()
-                                ->send();
-                        }),
                 ]),
-            ]);
+            ])
+            ->defaultSort('created_at', 'desc');
     }
 
     public static function infolist(Infolist $infolist): Infolist
     {
         return $infolist
             ->schema([
-                Infolists\Components\Section::make('Informasi Pembayaran')
+                Components\Section::make('Informasi Pembayaran')
                     ->schema([
-                        Infolists\Components\Grid::make(3)
-                            ->schema([
-                                Infolists\Components\TextEntry::make('no_invoice')
-                                    ->label('No. Invoice')
-                                    ->weight('bold')
-                                    ->copyable()
-                                    ->icon('heroicon-o-document-text'),
+                        Components\TextEntry::make('no_invoice')
+                            ->label('No. Invoice')
+                            ->size('lg')
+                            ->weight('bold')
+                            ->copyable(),
+                        Components\TextEntry::make('status')
+                            ->badge()
+                            ->color(fn (string $state): string => match ($state) {
+                                'pending' => 'warning',
+                                'verified' => 'success',
+                                'rejected' => 'danger',
+                                default => 'gray',
+                            }),
+                        Components\TextEntry::make('jumlah')
+                            ->money('IDR')
+                            ->size('lg')
+                            ->weight('bold')
+                            ->color('success'),
+                        Components\TextEntry::make('metode_pembayaran')
+                            ->label('Metode Pembayaran')
+                            ->badge(),
+                        Components\TextEntry::make('tanggal_bayar')
+                            ->label('Tanggal Transfer')
+                            ->date('d F Y'),
+                    ])
+                    ->columns(2),
 
-                                Infolists\Components\TextEntry::make('status')
-                                    ->label('Status')
-                                    ->badge()
-                                    ->color(fn (string $state): string => match ($state) {
-                                        'pending' => 'warning',
-                                        'verified' => 'success',
-                                        'rejected' => 'danger',
-                                        default => 'gray',
-                                    })
-                                    ->formatStateUsing(fn (string $state): string => match ($state) {
-                                        'pending' => 'Pending',
-                                        'verified' => 'Lunas',
-                                        'rejected' => 'Ditolak',
-                                        default => $state,
-                                    }),
+                Components\Section::make('Data Pendaftar')
+                    ->schema([
+                        Components\TextEntry::make('pendaftaran.no_pendaftaran')
+                            ->label('No. Pendaftaran')
+                            ->copyable(),
+                        Components\TextEntry::make('pendaftaran.nama_lengkap')
+                            ->label('Nama Lengkap'),
+                        Components\TextEntry::make('pendaftaran.nisn')
+                            ->label('NISN'),
+                        Components\TextEntry::make('pendaftaran.no_hp_siswa')
+                            ->label('No. HP'),
+                        Components\TextEntry::make('pendaftaran.email_siswa')
+                            ->label('Email'),
+                    ])
+                    ->columns(3),
 
-                                Infolists\Components\TextEntry::make('jumlah')
-                                    ->label('Jumlah')
-                                    ->money('IDR')
-                                    ->size('lg')
-                                    ->weight('bold')
-                                    ->color('success'),
-                            ]),
-
-                        Infolists\Components\Grid::make(2)
-                            ->schema([
-                                Infolists\Components\TextEntry::make('metode_pembayaran')
-                                    ->label('Metode Pembayaran')
-                                    ->badge()
-                                    ->formatStateUsing(fn (string $state): string => 
-                                        str($state)->replace('_', ' ')->title()
-                                    ),
-
-                                Infolists\Components\TextEntry::make('tanggal_bayar')
-                                    ->label('Tanggal Pembayaran')
-                                    ->dateTime('d F Y H:i')
-                                    ->icon('heroicon-o-calendar'),
-                            ]),
-
-                        Infolists\Components\TextEntry::make('catatan')
-                            ->label('Catatan Verifikasi')
-                            ->color('danger')
-                            ->icon('heroicon-o-exclamation-circle')
-                            ->visible(fn ($record) => $record->catatan)
-                            ->columnSpanFull(),
+                Components\Section::make('Bukti Pembayaran')
+                    ->schema([
+                        Components\ImageEntry::make('bukti_pembayaran')
+                            ->label('')
+                            ->disk('public')
+                            ->height(400)
+                            ->extraImgAttributes(['class' => 'rounded-lg shadow-lg'])
+                            ->visible(fn ($record) => !empty($record->bukti_pembayaran)),
                     ]),
 
-                Infolists\Components\Section::make('Detail Transfer')
+                Components\Section::make('Informasi Verifikasi')
                     ->schema([
-                        Infolists\Components\Grid::make(3)
-                            ->schema([
-                                Infolists\Components\TextEntry::make('bank_tujuan')
-                                    ->label('Bank Tujuan'),
-
-                                Infolists\Components\TextEntry::make('no_rekening')
-                                    ->label('No. Rekening')
-                                    ->copyable(),
-
-                                Infolists\Components\TextEntry::make('atas_nama')
-                                    ->label('Atas Nama'),
-                            ]),
-                    ])
-                    ->visible(fn ($record) => in_array($record->metode_pembayaran, ['transfer_bank', 'virtual_account']))
-                    ->collapsible(),
-
-                Infolists\Components\Section::make('Bukti Pembayaran')
-                    ->schema([
-                        Infolists\Components\ImageEntry::make('bukti_pembayaran')
-                            ->label('')
-                            ->size('lg')
+                        Components\TextEntry::make('verifier.name')
+                            ->label('Diverifikasi Oleh')
+                            ->default('-'),
+                        Components\TextEntry::make('verified_at')
+                            ->label('Tanggal Verifikasi')
+                            ->dateTime('d F Y H:i')
+                            ->default('-'),
+                        Components\TextEntry::make('catatan')
+                            ->label('Catatan')
+                            ->color('danger')
+                            ->visible(fn ($record) => !empty($record->catatan))
                             ->columnSpanFull(),
                     ])
-                    ->visible(fn ($record) => $record->bukti_pembayaran)
-                    ->collapsible(),
+                    ->columns(2)
+                    ->visible(fn ($record) => in_array($record->status, ['verified', 'rejected'])),
+            ]);
+    }
 
-                Infolists\Components\Section::make('Data Pendaftaran')
-                    ->schema([
-                        Infolists\Components\Grid::make(2)
-                            ->schema([
-                                Infolists\Components\TextEntry::make('pendaftaran.no_pendaftaran')
-                                    ->label('No. Pendaftaran')
-                                    ->copyable(),
-
-                                Infolists\Components\TextEntry::make('pendaftaran.nama_lengkap')
-                                    ->label('Nama Lengkap')
-                                    ->weight('bold'),
-
-                                Infolists\Components\TextEntry::make('pendaftaran.nisn')
-                                    ->label('NISN'),
-
-                                Infolists\Components\TextEntry::make('pendaftaran.no_hp_siswa')
-                                    ->label('No. HP')
-                                    ->copyable()
-                                    ->icon('heroicon-o-phone'),
-                            ]),
-                    ])
-                    ->collapsible(),
-
-                Infolists\Components\Section::make('Informasi Verifikasi')
-                    ->schema([
-                        Infolists\Components\Grid::make(2)
-                            ->schema([
-                                Infolists\Components\TextEntry::make('verifiedBy.name')
-                                    ->label('Diverifikasi Oleh')
-                                    ->icon('heroicon-o-user'),
-
-                                Infolists\Components\TextEntry::make('verified_at')
-                                    ->label('Tanggal Verifikasi')
-                                    ->dateTime('d F Y H:i')
-                                    ->icon('heroicon-o-clock'),
-                            ]),
-                    ])
-                    ->visible(fn ($record) => $record->verified_at)
-                    ->collapsible(),
-]);
-}
-public static function getPages(): array
-{
-    return [
-        'index' => Pages\ListVerifikasiPembayarans::route('/'),
-       // 'view' => Pages\ViewVerifikasiPembayaran::route('/{record}'),
-    ];
-}
+    public static function getPages(): array
+    {
+        return [
+            'index' => Pages\ListVerifikasiPembayarans::route('/'),
+            'view' => Pages\ViewVerifikasiPembayaran::route('/{record}'),
+        ];
+    }
 }

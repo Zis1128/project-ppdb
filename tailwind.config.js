@@ -1,17 +1,23 @@
-import preset from './vendor/filament/support/tailwind.config.preset'
+import defaultTheme from 'tailwindcss/defaultTheme';
+import forms from '@tailwindcss/forms';
 
+/** @type {import('tailwindcss').Config} */
 export default {
-    presets: [preset],
     content: [
-        './app/Filament/**/*.php',
+        './vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php',
+        './storage/framework/views/*.php',
         './resources/views/**/*.blade.php',
+        './app/Filament/**/*.php',
+        './resources/views/filament/**/*.blade.php',
         './vendor/filament/**/*.blade.php',
-        './resources/filament/admin/theme.css',
     ],
+
     theme: {
         extend: {
+            fontFamily: {
+                sans: ['Inter', ...defaultTheme.fontFamily.sans],
+            },
             colors: {
-                'sidebar-green': '#16a34a',
                 primary: {
                     50: '#eff6ff',
                     100: '#dbeafe',
@@ -27,4 +33,10 @@ export default {
             },
         },
     },
-}
+
+    plugins: [
+        forms,
+        require('@tailwindcss/typography'),
+        require('@tailwindcss/aspect-ratio'),
+    ],
+};
