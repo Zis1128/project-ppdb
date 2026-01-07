@@ -13,6 +13,9 @@ use App\Models\Persyaratan;
 use App\Models\DokumenSiswa;
 use App\Models\Pengaturan;
 use App\Models\Setting;
+use App\Jobs\Notifications\SendPendaftaranSubmittedWhatsApp;
+use App\Jobs\Notifications\SendBuktiUploadedWhatsApp;
+use App\Jobs\Notifications\SendPaymentVerifiedWhatsApp;
 use App\Services\MidtransService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -20,15 +23,18 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 
+
 class PendaftaranController extends Controller
 {
 
-    protected $midtransService; // TAMBAHKAN
+    protected $midtransService;
+   
 
     // TAMBAHKAN Constructor
     public function __construct(MidtransService $midtransService)
     {
         $this->midtransService = $midtransService;
+        
     }
 
 
@@ -188,29 +194,29 @@ class PendaftaranController extends Controller
                 'status_verifikasi' => 'pending',
             ]);
 
-            // Create pembayaran record
-            $biayaPendaftaran = Pengaturan::where('key', 'biaya_pendaftaran')->first();
-            $jumlahBayar = $biayaPendaftaran ? $biayaPendaftaran->value : 250000;
+            // // Create pembayaran record
+            // $biayaPendaftaran = Pengaturan::where('key', 'biaya_pendaftaran')->first();
+            // $jumlahBayar = $biayaPendaftaran ? $biayaPendaftaran->value : 250000;
 
-            // Generate invoice number
-            $lastInvoice = Pembayaran::whereYear('created_at', date('Y'))
-                ->max('no_invoice');
+            // // Generate invoice number
+            // $lastInvoice = Pembayaran::whereYear('created_at', date('Y'))
+            //     ->max('no_invoice');
 
-            if ($lastInvoice) {
-                $lastNum = intval(substr($lastInvoice, -4));
-                $newNum = str_pad($lastNum + 1, 4, '0', STR_PAD_LEFT);
-            } else {
-                $newNum = '0001';
-            }
+            // if ($lastInvoice) {
+            //     $lastNum = intval(substr($lastInvoice, -4));
+            //     $newNum = str_pad($lastNum + 1, 4, '0', STR_PAD_LEFT);
+            // } else {
+            //     $newNum = '0001';
+            // }
 
-            $noInvoice = 'INV' . date('Ymd') . $newNum;
+            // $noInvoice = 'INV' . date('Ymd') . $newNum;
 
-            Pembayaran::create([
-                'pendaftaran_id' => $pendaftaran->id,
-                'no_invoice' => $noInvoice,
-                'jumlah' => $jumlahBayar,
-                'status' => 'pending',
-            ]);
+            // Pembayaran::create([
+            //     'pendaftaran_id' => $pendaftaran->id,
+            //     'no_invoice' => $noInvoice,
+            //     'jumlah' => $jumlahBayar,
+            //     'status' => 'pending',
+            // ]);
 
             DB::commit();
 
@@ -314,42 +320,71 @@ class PendaftaranController extends Controller
     }
 
     public function submit(Pendaftaran $pendaftaran)
-    {
-        // Check ownership
-        if ($pendaftaran->user_id !== auth()->id()) {
-            abort(403, 'Unauthorized action.');
-        }
-
-        // Check if already submitted
-        if ($pendaftaran->status_pendaftaran !== 'draft') {
-            return redirect()->route('dashboard.pendaftaran.index')
-                ->with('error', 'Pendaftaran sudah disubmit sebelumnya.');
-        }
-
-        // Check if all required documents are uploaded
-        $persyaratanWajib = Persyaratan::where('is_wajib', true)->pluck('id');
-        $uploadedDocs = DokumenSiswa::where('pendaftaran_id', $pendaftaran->id)
-            ->whereIn('persyaratan_id', $persyaratanWajib)
-            ->pluck('persyaratan_id');
-
-        if ($persyaratanWajib->diff($uploadedDocs)->count() > 0) {
-            return redirect()->route('dashboard.pendaftaran.dokumen', $pendaftaran)
-                ->with('error', 'Harap lengkapi semua dokumen wajib terlebih dahulu.');
-        }
-
-        try {
-            $pendaftaran->update([
-                'status_pendaftaran' => 'submitted',
-                'tanggal_daftar' => now(),
-            ]);
-
-            return redirect()->route('dashboard.pendaftaran.index')
-                ->with('success', 'Pendaftaran berhasil disubmit! Silakan lakukan pembayaran.');
-
-        } catch (\Exception $e) {
-            return back()->with('error', 'Terjadi kesalahan: ' . $e->getMessage());
-        }
+{
+    // Check ownership
+    if ($pendaftaran->user_id !== auth()->id()) {
+        abort(403, 'Unauthorized action.');
     }
+
+    // Check if already submitted
+    if ($pendaftaran->status_pendaftaran !== 'draft') {
+        return redirect()->route('dashboard.pendaftaran.index')
+            ->with('error', 'Pendaftaran sudah disubmit sebelumnya.');
+    }
+
+    // Check if all required documents are uploaded
+    $persyaratanWajib = Persyaratan::where('is_wajib', true)->pluck('id');
+    $uploadedDocs = DokumenSiswa::where('pendaftaran_id', $pendaftaran->id)
+        ->whereIn('persyaratan_id', $persyaratanWajib)
+        ->pluck('persyaratan_id');
+
+    if ($persyaratanWajib->diff($uploadedDocs)->count() > 0) {
+        return redirect()->route('dashboard.pendaftaran.dokumen', $pendaftaran)
+            ->with('error', 'Harap lengkapi semua dokumen wajib terlebih dahulu.');
+    }
+
+    try {
+        DB::beginTransaction();
+
+        // Update status pendaftaran
+        $pendaftaran->update([
+            'status_pendaftaran' => 'submitted',
+            'tanggal_daftar' => now(),
+        ]);
+
+        // ✅ CREATE PEMBAYARAN DI SINI!
+        $biayaPendaftaran = Setting::get('biaya_pendaftaran', 250000);
+
+        // Generate invoice number
+        $lastInvoice = Pembayaran::whereYear('created_at', date('Y'))
+            ->max('no_invoice');
+
+        if ($lastInvoice) {
+            $lastNum = intval(substr($lastInvoice, -4));
+            $newNum = str_pad($lastNum + 1, 4, '0', STR_PAD_LEFT);
+        } else {
+            $newNum = '0001';
+        }
+
+        $noInvoice = 'INV' . date('Ymd') . $newNum;
+
+        Pembayaran::create([
+            'pendaftaran_id' => $pendaftaran->id,
+            'no_invoice' => $noInvoice,
+            'jumlah' => $biayaPendaftaran,
+            'status' => 'pending',
+        ]);
+
+        DB::commit();
+
+        return redirect()->route('dashboard.pendaftaran.index')
+            ->with('success', 'Pendaftaran berhasil disubmit! Silakan lakukan pembayaran.');
+
+    } catch (\Exception $e) {
+        DB::rollback();
+        return back()->with('error', 'Terjadi kesalahan: ' . $e->getMessage());
+    }
+}
 
     public function dokumen(Pendaftaran $pendaftaran)
     {
@@ -368,7 +403,7 @@ class PendaftaranController extends Controller
         ));
     }
 
-    public function pembayaran()
+   public function pembayaran()
 {
     $pendaftaran = Pendaftaran::where('user_id', auth()->id())->first();
 
@@ -377,19 +412,53 @@ class PendaftaranController extends Controller
             ->with('error', 'Anda belum memiliki data pendaftaran.');
     }
 
+    // ✅ GUARD 1: Cek status pendaftaran
+    if ($pendaftaran->status_pendaftaran === 'draft') {
+        return redirect()->route('dashboard.pendaftaran.index')
+            ->with('warning', '⚠️ Silakan lengkapi dokumen dan submit pendaftaran terlebih dahulu sebelum melakukan pembayaran.');
+    }
+
+    // ✅ GUARD 2: Cek apakah dokumen wajib sudah lengkap (extra security)
+    $persyaratanWajib = Persyaratan::where('is_wajib', true)->pluck('id');
+    $uploadedDocs = DokumenSiswa::where('pendaftaran_id', $pendaftaran->id)
+        ->whereIn('persyaratan_id', $persyaratanWajib)
+        ->pluck('persyaratan_id');
+
+    if ($persyaratanWajib->diff($uploadedDocs)->count() > 0) {
+        return redirect()->route('dashboard.pendaftaran.dokumen', $pendaftaran)
+            ->with('warning', '⚠️ Harap lengkapi semua dokumen wajib terlebih dahulu.');
+    }
+
     $pembayaran = Pembayaran::where('pendaftaran_id', $pendaftaran->id)->first();
 
-    // Payment settings - GET FROM SETTING MODEL
+    // ✅ Create pembayaran if not exists (edge case)
+    if (!$pembayaran) {
+        $biayaPendaftaran = Setting::get('biaya_pendaftaran', 250000);
+
+        $lastInvoice = Pembayaran::whereYear('created_at', date('Y'))
+            ->max('no_invoice');
+
+        if ($lastInvoice) {
+            $lastNum = intval(substr($lastInvoice, -4));
+            $newNum = str_pad($lastNum + 1, 4, '0', STR_PAD_LEFT);
+        } else {
+            $newNum = '0001';
+        }
+
+        $noInvoice = 'INV' . date('Ymd') . $newNum;
+
+        $pembayaran = Pembayaran::create([
+            'pendaftaran_id' => $pendaftaran->id,
+            'no_invoice' => $noInvoice,
+            'jumlah' => $biayaPendaftaran,
+            'status' => 'pending',
+        ]);
+    }
+
+    // Payment settings
     $midtransEnabled = Setting::get('midtrans_enabled', false);
     $transferBankEnabled = Setting::get('transfer_bank_enabled', true);
     $biayaPendaftaran = Setting::get('biaya_pendaftaran', 250000);
-
-    // Debug: Log values (TEMPORARY - HAPUS SETELAH TESTING)
-    \Log::info('Payment Settings:', [
-        'midtrans_enabled' => $midtransEnabled,
-        'transfer_bank_enabled' => $transferBankEnabled,
-        'biaya_pendaftaran' => $biayaPendaftaran,
-    ]);
 
     // Bank info
     $bankName = Setting::get('bank_name', 'Bank BRI');
@@ -406,8 +475,7 @@ class PendaftaranController extends Controller
         'bankAccountNumber',
         'bankAccountName'
     ));
-
-    }
+}
 
 /**
  * Upload bukti pembayaran
@@ -532,6 +600,9 @@ public function uploadBukti(Request $request)
             'status' => $pembayaran->status,
         ]);
 
+    
+
+
         return redirect()->route('dashboard.pembayaran.index')
             ->with('success', 'Bukti pembayaran berhasil diupload! Silakan tunggu verifikasi dari panitia.');
 
@@ -634,6 +705,8 @@ public function payWithMidtrans()
 
     // If payment already verified, redirect
     if ($pembayaran->status === 'verified') {
+
+
         return redirect()->route('dashboard.pembayaran.index')
             ->with('info', 'Pembayaran Anda sudah terverifikasi');
     }
@@ -726,6 +799,8 @@ public function paymentFinish(Request $request)
         \Log::channel('daily')->info('UPDATE BERHASIL!', [
             'status_baru' => $pembayaran->fresh()->status,
         ]);
+
+        
         
         return redirect()->route('dashboard.pembayaran.success')
             ->with('success', 'Pembayaran berhasil diverifikasi!');

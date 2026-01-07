@@ -50,7 +50,7 @@
             <div class="lg:col-span-2 space-y-6">
 
                 @if ($pembayaran && $pembayaran->status === 'verified')
-                    <!-- Payment Success -->
+                    <!-- ✅ Payment Success -->
                     <div class="bg-white rounded-xl shadow-sm p-6">
                         <div class="text-center">
                             <div class="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -97,8 +97,18 @@
                             </a>
                         </div>
                     </div>
-                @elseif($pembayaran && $pembayaran->status === 'pending')
-                    <!-- Payment Pending -->
+                @elseif($pembayaran && $pembayaran->status === 'rejected')
+                    <!-- ❌ Payment Rejected -->
+                    <div class="bg-white rounded-xl shadow-sm p-6">
+                        <!-- ... existing rejected content ... -->
+                    </div>
+                @elseif(
+                    $pembayaran &&
+                        $pembayaran->status === 'pending' &&
+                        ($pembayaran->bukti_pembayaran ||
+                            $pembayaran->midtrans_order_id ||
+                            ($pembayaran->tanggal_bayar && $pembayaran->metode_pembayaran)))
+                    <!-- ⏳ Payment Pending - SUDAH UPLOAD/BAYAR -->
                     <div class="bg-white rounded-xl shadow-sm p-6">
                         <div class="flex items-start space-x-4 mb-6">
                             <div
@@ -122,27 +132,40 @@
                                     <span class="text-gray-600">No. Invoice:</span>
                                     <span class="font-semibold">{{ $pembayaran->no_invoice }}</span>
                                 </div>
-                                <div class="flex justify-between">
-                                    <span class="text-gray-600">Metode Pembayaran:</span>
-                                    <span class="font-semibold">{{ $pembayaran->metode_pembayaran }}</span>
-                                </div>
-                                <div class="flex justify-between">
-                                    <span class="text-gray-600">Tipe Pembayaran:</span>
-                                    <span
-                                        class="font-semibold">{{ $pembayaran->payment_type === 'midtrans' ? 'Online (Midtrans)' : 'Manual Transfer' }}</span>
-                                </div>
-                                <div class="flex justify-between">
-                                    <span class="text-gray-600">Tanggal Bayar:</span>
-                                    <span
-                                        class="font-semibold">{{ $pembayaran->tanggal_bayar ? $pembayaran->tanggal_bayar->format('d M Y') : '-' }}</span>
-                                </div>
+                                @if ($pembayaran->metode_pembayaran)
+                                    <div class="flex justify-between">
+                                        <span class="text-gray-600">Metode Pembayaran:</span>
+                                        <span class="font-semibold">{{ $pembayaran->metode_pembayaran }}</span>
+                                    </div>
+                                @endif
+                                @if ($pembayaran->payment_type)
+                                    <div class="flex justify-between">
+                                        <span class="text-gray-600">Tipe Pembayaran:</span>
+                                        <span class="font-semibold">
+                                            @if ($pembayaran->payment_type === 'midtrans')
+                                                Online (Midtrans)
+                                            @elseif($pembayaran->payment_type === 'manual')
+                                                Manual Transfer
+                                            @else
+                                                {{ $pembayaran->payment_type }}
+                                            @endif
+                                        </span>
+                                    </div>
+                                @endif
+                                @if ($pembayaran->tanggal_bayar)
+                                    <div class="flex justify-between">
+                                        <span class="text-gray-600">Tanggal Bayar:</span>
+                                        <span
+                                            class="font-semibold">{{ $pembayaran->tanggal_bayar->format('d M Y') }}</span>
+                                    </div>
+                                @endif
                                 <div class="flex justify-between">
                                     <span class="text-gray-600">Jumlah:</span>
                                     <span class="font-semibold">Rp
                                         {{ number_format($pembayaran->jumlah, 0, ',', '.') }}</span>
                                 </div>
 
-                                @if ($pembayaran->payment_type === 'midtrans' && $pembayaran->midtrans_order_id)
+                                @if ($pembayaran->midtrans_order_id)
                                     <div class="flex justify-between">
                                         <span class="text-gray-600">Order ID:</span>
                                         <span class="font-semibold">{{ $pembayaran->midtrans_order_id }}</span>
@@ -150,7 +173,7 @@
                                 @endif
                             </div>
 
-                            @if ($pembayaran->payment_type === 'manual' && $pembayaran->bukti_pembayaran)
+                            @if ($pembayaran->bukti_pembayaran)
                                 <div class="mt-4 pt-4 border-t border-gray-200">
                                     <p class="text-sm text-gray-600 mb-2">Bukti Pembayaran:</p>
                                     <img src="{{ asset('storage/' . $pembayaran->bukti_pembayaran) }}"
@@ -159,108 +182,8 @@
                             @endif
                         </div>
                     </div>
-                @elseif($pembayaran && $pembayaran->status === 'rejected')
-                    <!-- Payment Rejected -->
-                    <div class="bg-white rounded-xl shadow-sm p-6">
-                        <div class="flex items-start space-x-4 mb-6">
-                            <div class="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center flex-shrink-0">
-                                <svg class="w-6 h-6 text-red-600" fill="none" stroke="currentColor"
-                                    viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                        d="M6 18L18 6M6 6l12 12"></path>
-                                </svg>
-                            </div>
-                            <div class="flex-1">
-                                <h3 class="text-lg font-bold text-gray-900 mb-2">Pembayaran Ditolak</h3>
-                                <p class="text-gray-600">Bukti pembayaran Anda ditolak oleh panitia. Silakan upload ulang
-                                    bukti pembayaran yang valid.</p>
-                            </div>
-                        </div>
-
-                        @if ($pembayaran->catatan)
-                            <div class="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
-                                <p class="text-sm font-semibold text-red-800 mb-1">Alasan Penolakan:</p>
-                                <p class="text-sm text-red-700">{{ $pembayaran->catatan }}</p>
-                            </div>
-                        @endif
-
-                        <!-- Upload Form untuk Retry -->
-                        <div class="bg-gray-50 rounded-lg p-4">
-                            <p class="text-sm text-gray-600 mb-4 font-semibold">Silakan upload ulang bukti pembayaran:</p>
-
-                            <div class="bg-green-50 rounded-lg p-4 mb-4">
-                                <p class="text-sm font-semibold text-gray-700 mb-3">📋 Informasi Rekening:</p>
-                                <div class="space-y-2">
-                                    <div class="flex items-center justify-between">
-                                        <span class="text-sm text-gray-600">Bank:</span>
-                                        <span class="font-bold text-gray-900">{{ $bankName ?? '-' }}</span>
-                                    </div>
-                                    <div class="flex items-center justify-between">
-                                        <span class="text-sm text-gray-600">No. Rekening:</span>
-                                        <span class="font-bold text-gray-900">{{ $bankAccountNumber ?? '-' }}</span>
-                                    </div>
-                                    <div class="flex items-center justify-between">
-                                        <span class="text-sm text-gray-600">Atas Nama:</span>
-                                        <span class="font-bold text-gray-900">{{ $bankAccountName ?? '-' }}</span>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- Upload Form -->
-                            <form action="{{ route('dashboard.pembayaran.upload') }}" method="POST"
-                                enctype="multipart/form-data">
-                                @csrf
-                                <input type="hidden" name="pembayaran_id" value="{{ $pembayaran->id }}">
-
-                                <div class="space-y-4">
-                                    <div>
-                                        <label class="block text-sm font-semibold text-gray-700 mb-2">
-                                            Metode Transfer <span class="text-red-500">*</span>
-                                        </label>
-                                        <select name="metode_pembayaran" required
-                                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent">
-                                            <option value="">Pilih Metode</option>
-                                            <option value="Transfer Bank">Transfer Bank</option>
-                                            <option value="Setor Tunai">Setor Tunai</option>
-                                            <option value="Mobile Banking">Mobile Banking</option>
-                                            <option value="ATM">ATM</option>
-                                        </select>
-                                    </div>
-
-                                    <div>
-                                        <label class="block text-sm font-semibold text-gray-700 mb-2">
-                                            Tanggal Transfer <span class="text-red-500">*</span>
-                                        </label>
-                                        <input type="date" name="tanggal_bayar" required max="{{ date('Y-m-d') }}"
-                                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent">
-                                    </div>
-
-                                    <div>
-                                        <label class="block text-sm font-semibold text-gray-700 mb-2">
-                                            Bukti Transfer Baru <span class="text-red-500">*</span>
-                                        </label>
-                                        <input type="file" name="bukti_pembayaran"
-                                            accept="image/jpeg,image/png,image/jpg" required
-                                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-green-50 file:text-green-700 hover:file:bg-green-100">
-                                        <p class="text-xs text-gray-500 mt-1">Format: JPG, JPEG, PNG - Max 2MB</p>
-                                    </div>
-
-                                    <button type="submit"
-                                        class="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-6 rounded-lg transition flex items-center justify-center">
-                                        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor"
-                                            viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15">
-                                            </path>
-                                        </svg>
-                                        Upload Ulang Bukti Pembayaran
-                                    </button>
-                                </div>
-                            </form>
-                        </div>
-                    </div>
                 @else
-                    <!-- Payment Options -->
+                    <!-- 💳 Payment Options - BELUM BAYAR -->
                     <div class="bg-white rounded-xl shadow-sm p-6">
                         <h3 class="text-lg font-bold text-gray-900 mb-6">Pilih Metode Pembayaran</h3>
 
@@ -370,7 +293,6 @@
                                     <form action="{{ route('dashboard.pembayaran.upload') }}" method="POST"
                                         enctype="multipart/form-data">
                                         @csrf
-                                        <input type="hidden" name="pembayaran_id" value="{{ $pembayaran->id ?? '' }}">
 
                                         <div class="space-y-4">
                                             <div>
@@ -420,7 +342,7 @@
                                                 <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor"
                                                     viewBox="0 0 24 24">
                                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                        d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12">
+                                                        d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 1 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12">
                                                     </path>
                                                 </svg>
                                                 Upload Bukti Pembayaran

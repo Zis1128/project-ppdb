@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Jobs\Notifications\SendWelcomeWhatsApp;
+use App\Services\WhatsAppService;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -52,6 +54,17 @@ class RegisterController extends Controller
             DB::commit();
 
             event(new Registered($user));
+
+            // ✅ Dispatch job (async)
+    SendWelcomeWhatsApp::dispatch($user);
+
+            // ✅ Send welcome WhatsApp
+        try {
+            $this->whatsappService->sendWelcomeMessage($user);
+        } catch (\Exception $e) {
+            \Log::error('Failed to send welcome WhatsApp', ['error' => $e->getMessage()]);
+            // Don't block registration if WA fails
+            }
 
             Auth::login($user);
 
